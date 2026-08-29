@@ -34,7 +34,10 @@ of someone else's environment design, doesn't include Wolfpack, and doesn't
 run the paper's own independent, non-target-shared, growing-replay-buffer
 DQN setup. This repo is the from-scratch faithful baseline instead: both of
 the paper's own games, its own (much simpler) agent architecture, and its
-own three named experiments — nothing else.
+own three named experiments, by default. An optional Ray RLlib backend can
+also be layered on top of the same environments as a cross-check — see
+"Optional: RLlib backend" below — without touching any of that default
+setup.
 
 ## The mechanism
 
