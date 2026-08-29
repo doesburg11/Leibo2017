@@ -243,7 +243,13 @@ attempt the real thing.
 ## Running it
 
 ```bash
+# Option A: plain pip, into whatever Python/venv you already have active
 pip install -r requirements.txt
+
+# Option B: conda, into an isolated env this repo owns
+conda env create -f environment.yml
+conda activate leibo2017
+
 pytest tests/ -q
 
 # Smoke tests (small step counts; see above)
