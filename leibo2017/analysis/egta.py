@@ -76,6 +76,10 @@ def estimate_payoff_matrix(
     """Sample `n_samples` policy pairs from each of the 4 role combinations
     (CC, DD, CD, DC) and average returns into R, P, S, T (Sec. 5.1's
     "repeated until convergence of the cell values")."""
+    if not pool_c or not pool_d:
+        raise ValueError("estimate_payoff_matrix requires non-empty Pi^C and Pi^D pools")
+    if n_samples <= 0:
+        raise ValueError(f"n_samples must be positive, got {n_samples}")
     rng = rng or np.random.default_rng()
     r_vals, p_vals, s_vals, t_vals = [], [], [], []
 

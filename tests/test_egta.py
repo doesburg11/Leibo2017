@@ -1,4 +1,6 @@
-from leibo2017.analysis.egta import PayoffEstimate
+import pytest
+
+from leibo2017.analysis.egta import PayoffEstimate, estimate_payoff_matrix
 
 
 def test_classify_prisoners_dilemma():
@@ -35,3 +37,15 @@ def test_classify_non_ssd_no_fear_or_greed():
     assert est.fear <= 0
     assert est.greed <= 0
     assert est.classify() == "Non-SSD (R>P)"
+
+
+def test_estimate_payoff_matrix_rejects_empty_pools():
+    with pytest.raises(ValueError):
+        estimate_payoff_matrix(lambda: None, [], [object()], n_samples=5)
+    with pytest.raises(ValueError):
+        estimate_payoff_matrix(lambda: None, [object()], [], n_samples=5)
+
+
+def test_estimate_payoff_matrix_rejects_non_positive_samples():
+    with pytest.raises(ValueError):
+        estimate_payoff_matrix(lambda: None, [object()], [object()], n_samples=0)

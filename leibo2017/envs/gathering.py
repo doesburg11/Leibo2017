@@ -161,14 +161,6 @@ class GatheringEnv:
         rewards = [0.0, 0.0]
         beams_fired: list[tuple[int, list[tuple[int, int]]]] = []
 
-        # Tick existing cooldowns down *before* this step's beam hits are
-        # resolved, so a player newly tagged this step gets the full
-        # n_tagged steps of removal rather than n_tagged - 1 (a player
-        # already mid-cooldown ticks normally).
-        for p in self.players:
-            if p.tagged_timer > 0:
-                p.tagged_timer -= 1
-
         order = self.rng.permutation(self.num_agents)
         occupied = {(p.row, p.col) for p in self.players if p.tagged_timer == 0}
 
@@ -208,6 +200,7 @@ class GatheringEnv:
                         p.apples_collected += 1
                         rewards[i] += 1.0
 
+        newly_tagged = set()
         for shooter_idx, cells in beams_fired:
             for j, p in enumerate(self.players):
                 if j == shooter_idx or p.tagged_timer > 0:
@@ -217,12 +210,34 @@ class GatheringEnv:
                     if p.hits_taken >= 2:
                         p.tagged_timer = cfg.n_tagged
                         p.hits_taken = 0
-                        p.row, p.col = p.start_row, p.start_col
+                        newly_tagged.add(j)
+                        # Position is reassigned lazily on reactivation
+                        # (below), not here: while tagged_timer > 0 the
+                        # player is excluded from `occupied`/rendering, so
+                        # its row/col don't matter until it reappears --
+                        # jumping straight to start_row/start_col here would
+                        # risk landing on whatever cell the other player
+                        # currently occupies.
 
         for site, ready_at in list(self._apple_respawn_at.items()):
             if self._t + 1 >= ready_at:
                 self._apple_present[site] = True
                 del self._apple_respawn_at[site]
+
+        # Tick cooldowns *after* this step's own tagging is resolved, and
+        # skip anyone newly tagged this step -- so a player tagged now gets
+        # exactly n_tagged full future steps of removal (not n_tagged - 1
+        # from double-counting the step it was tagged on). A player whose
+        # cooldown just reached 0 is placed back on the map now, preferring
+        # its own start cell but falling back to any free cell if another
+        # active player is currently standing there.
+        active_cells = {(p.row, p.col) for p in self.players if p.tagged_timer == 0}
+        for j, p in enumerate(self.players):
+            if p.tagged_timer > 0 and j not in newly_tagged:
+                p.tagged_timer -= 1
+                if p.tagged_timer == 0:
+                    p.row, p.col = self._find_free_cell(p.start_row, p.start_col, active_cells)
+                    active_cells.add((p.row, p.col))
 
         self._t += 1
         done = self._t >= cfg.episode_length
@@ -232,3 +247,13 @@ class GatheringEnv:
             ],
         }
         return self._observations(), rewards, done, info
+
+    def _find_free_cell(self, preferred_row: int, preferred_col: int, occupied: set) -> tuple[int, int]:
+        if (preferred_row, preferred_col) not in occupied:
+            return preferred_row, preferred_col
+        h, w = self._static_grid.shape
+        for _ in range(200):  # bounded: a pathological (tiny) map must not hang
+            r, c = int(self.rng.integers(1, h - 1)), int(self.rng.integers(1, w - 1))
+            if self._static_grid[r, c] != WALL and (r, c) not in occupied:
+                return r, c
+        return preferred_row, preferred_col  # last resort: overlap is rare enough to accept over hanging

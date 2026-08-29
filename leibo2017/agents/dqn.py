@@ -108,11 +108,14 @@ class DQNAgent:
     def __init__(self, config: DQNConfig | None = None, device: str = "cpu"):
         self.cfg = config or DQNConfig()
         self.device = torch.device(device)
-        gen = torch.Generator().manual_seed(self.cfg.seed) if self.cfg.seed is not None else None
-        self._torch_rng = gen
         self._py_rng = random.Random(self.cfg.seed)
         self._np_rng = np.random.default_rng(self.cfg.seed)
 
+        if self.cfg.seed is not None:
+            # nn.Linear draws its initial weights from PyTorch's global RNG;
+            # seeding it here (not just the buffer/epsilon RNGs above) is
+            # what actually makes DQNAgent(DQNConfig(seed=k)) reproducible.
+            torch.manual_seed(self.cfg.seed)
         self.q_net = QNetwork(self.cfg.hidden_size, self.cfg.num_actions).to(self.device)
         if self.cfg.use_target_network:
             self.target_net = QNetwork(self.cfg.hidden_size, self.cfg.num_actions).to(self.device)

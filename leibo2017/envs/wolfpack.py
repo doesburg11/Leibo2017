@@ -153,6 +153,14 @@ class WolfpackEnv:
                     w["row"], w["col"] = nr, nc
                     occupied.add((nr, nc))
 
+        # Move the prey before checking for a capture: a capture is any
+        # overlap between a wolf and the prey once both have moved this
+        # step, regardless of which one stepped onto the other. Checking
+        # only "did a wolf just step onto the prey" (i.e. before the prey's
+        # own move) misses the case where the prey's random wander/flee
+        # step lands it on a wolf that stayed still or moved elsewhere.
+        self._move_prey()
+
         capturer = None
         for i, w in enumerate(self.wolves):
             if (w["row"], w["col"]) == (self.prey["row"], self.prey["col"]):
@@ -175,8 +183,6 @@ class WolfpackEnv:
                 rewards[capturer] += cfg.r_lone
             self._respawn_prey()
 
-        self._move_prey()
-
         self._t += 1
         done = self._t >= cfg.episode_length
         avg_wolves_per_capture = (self.wolves_per_capture_sum / self.captures) if self.captures else 0.0
@@ -186,9 +192,10 @@ class WolfpackEnv:
     def _respawn_prey(self) -> None:
         h, w = self.cfg.height, self.cfg.width
         occupied = {(wf["row"], wf["col"]) for wf in self.wolves}
-        while True:
+        for _ in range(200):  # bounded: a pathological config (tiny arena, many wolves) must not hang
             r = self.rng.integers(1, h - 1)
             c = self.rng.integers(1, w - 1)
             if (r, c) not in occupied:
                 self.prey["row"], self.prey["col"] = int(r), int(c)
                 return
+        raise RuntimeError("WolfpackEnv: no free cell to respawn the prey (arena too small for the wolf count)")

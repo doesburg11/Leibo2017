@@ -53,3 +53,17 @@ def test_target_network_updates_on_schedule():
 def torch_allclose(a, b):
     import torch
     return torch.allclose(a, b)
+
+
+def test_seed_makes_network_initialization_reproducible():
+    """Regression test (Codex review, 2026-08-29): DQNConfig.seed seeded the
+    buffer/epsilon RNGs but not nn.Linear's weight init, which draws from
+    PyTorch's global RNG -- so two agents built with the same seed used to
+    get different initial Q-networks."""
+    a = DQNAgent(DQNConfig(seed=123))
+    b = DQNAgent(DQNConfig(seed=123))
+    assert torch_allclose(a.q_net.fc1.weight, b.q_net.fc1.weight)
+    assert torch_allclose(a.q_net.out.bias, b.q_net.out.bias)
+
+    c = DQNAgent(DQNConfig(seed=456))
+    assert not torch_allclose(a.q_net.fc1.weight, c.q_net.fc1.weight)
