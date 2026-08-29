@@ -246,9 +246,12 @@ attempt the real thing.
 # Option A: plain pip, into whatever Python/venv you already have active
 pip install -r requirements.txt
 
-# Option B: conda, into an isolated env this repo owns
-conda env create -f environment.yml
-conda activate leibo2017
+# Option B: conda, into a local .conda/ this repo owns (not a
+# name-registered env in conda's default envs directory -- the --prefix
+# flag is what makes it project-local; plain `-f environment.yml` alone
+# does not reliably honor the file's own `prefix:` line)
+./create_conda_env.sh
+conda activate ./.conda
 
 pytest tests/ -q
 
