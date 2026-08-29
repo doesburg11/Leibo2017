@@ -115,7 +115,15 @@ and what was chosen instead (all in code, clearly marked):**
   and players starting at opposite ends of the corridor, matching Fig. 3's
   visual proportions; `wolfpack.py` uses an arbitrary 21×21 open arena.
   Neither is verified against DeepMind's actual level file, which isn't
-  published in the paper.
+  published in the paper. Light corroboration, not confirmation: Vinitsky
+  et al.'s independent Gathering implementation (ported in the sibling
+  [SequentialSocialDilemmas](https://github.com/doesburg11/SequentialSocialDilemmas)
+  repo) also lands on a similarly-shaped multi-cluster apple orchard and
+  the identical `(3, 16, 21)` observation shape — but it's their own
+  reconstruction from the same Fig. 3 schematic, not a second, independent
+  data point grounded in DeepMind's actual level file, so it doesn't
+  settle the ambiguity, just shows two independent guesses converging on
+  the same general shape.
 - **The Q-network's exact architecture is ambiguous.** Sec. 4 says only
   "two hidden layers with 32 units, interleaved with rectified linear
   layers" — no mention of convolution, despite the network's input being
