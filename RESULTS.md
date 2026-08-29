@@ -122,3 +122,52 @@ sane, non-degenerate numbers at small scale" should be drawn from any of
 the above — none of these runs come close to the paper's own 40,000,000-
 step-per-condition budget, and no statistical comparison across seeds has
 been attempted.
+
+## 5. Codex second-opinion review — two more real bugs caught
+
+Per standing project instructions, `codex exec` reviewed
+`grid_utils.py`/`gathering.py`/`wolfpack.py`/`dqn.py`/`egta.py`
+independently after the above. It found two further genuine bugs beyond
+the ones self-caught above:
+
+- **Wolfpack missed captures caused by the prey's own movement.** The
+  capture check ran *before* `_move_prey()`, so it only ever caught "a
+  wolf stepped onto the prey," never "the prey wandered onto a wolf that
+  stayed still." Reproduced directly (a fixed RNG seed with a stationary
+  wolf and a prey scripted to step onto it registered zero captures).
+  Fixed by moving `_move_prey()` before the capture check and checking
+  overlap using both entities' final positions for the step.
+- **Gathering could reactivate a tagged player onto an occupied cell.**
+  The original fix for the tag-cooldown off-by-one (§2 above) still
+  teleported a reactivating player straight to `start_row`/`start_col`
+  without checking whether the other player was currently standing there;
+  Codex reproduced both players ending up on the same cell. Fixed by
+  making reactivation lazy (position isn't touched at tag time — it
+  doesn't matter while the player is excluded from rendering/occupancy —
+  and is assigned to a free cell, preferring the start cell, only once the
+  cooldown actually reaches zero) and by restructuring the cooldown
+  decrement to exclude a player tagged in the same step, which also fixed
+  a related semantic gap Codex flagged (a player's removal now lasts
+  exactly `n_tagged` future steps, not `n_tagged - 1` in one code path and
+  `n_tagged` in another depending on which step the tag landed in).
+
+It also flagged that `DQNConfig.seed` seeded the replay-buffer/epsilon
+RNGs but not `nn.Linear`'s weight initialization (which draws from
+PyTorch's global RNG) — two agents built with the same seed had different
+initial Q-networks, undermining reproducibility of any seeded experiment
+sweep. Fixed with an explicit `torch.manual_seed(seed)` before network
+construction.
+
+Two low-severity robustness gaps were also fixed: `estimate_payoff_matrix`
+now rejects empty policy pools / non-positive sample counts up front
+instead of failing with a generic index or RNG error several lines later,
+and `WolfpackEnv._respawn_prey`'s retry loop is now bounded (200 attempts,
+then a clear `RuntimeError`) instead of an unbounded `while True` that
+could hang given a pathological arena/wolf-count config.
+
+Codex's concurrency note (that `ReplayBuffer` and `DQNAgent` aren't
+thread-safe) was reviewed and not acted on: nothing in this codebase runs
+training across threads or processes sharing an agent, so there's no
+actual race to fix — noted here rather than silently dropped.
+
+All fixes have regression tests; 29/29 tests passing after this round.
