@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Base install only (requirements.txt): the optional RLlib backend's
+      # tests (tests/test_rllib_wrappers.py) skip themselves automatically
+      # via pytest.importorskip("ray") when ray isn't installed, so CI
+      # stays fast and doesn't need requirements-rllib.txt.
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -q
