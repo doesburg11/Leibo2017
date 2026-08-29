@@ -256,6 +256,43 @@ Each script writes a `results.json` and one or more `.png` figures to
 `python run_experiment1_gathering.py --help` (etc.) for the full set of
 sweep/step/seed overrides.
 
+## Optional: RLlib backend
+
+Everything above trains with `leibo2017/agents/dqn.py` — a direct,
+literal implementation of the paper's own independent-DQN method, and the
+only thing every `run_*.py` script and the README's fidelity claims are
+about. `run_rllib_train.py` is a separate, purely additive way to train
+the *exact same* `GatheringEnv`/`WolfpackEnv` with Ray RLlib's PPO or DQN
+instead — useful for checking whether a standard, well-tuned RL library
+reaches different conclusions than the paper's own simple setup on
+identical environments. It does not touch `leibo2017/agents/dqn.py`,
+doesn't change what any existing script does, and isn't required for
+anything else in this repo — the base `pip install -r requirements.txt`
+has no Ray/RLlib dependency at all.
+
+It also isn't a path to reproducing Fig. 4/6/7 via RLlib: it reports raw
+per-agent episode return from RLlib's own training loop, not the paper's
+beam-use-rate / wolves-per-capture social-behavior metrics (wiring those
+up would need a custom RLlib callback, not built here).
+
+```bash
+pip install -r requirements-rllib.txt   # ray[rllib]; tested against ray==2.58.0
+python run_rllib_train.py --game gathering --algo PPO --iterations 10
+python run_rllib_train.py --game wolfpack --algo DQN --iterations 10
+```
+
+`leibo2017/envs/rllib_wrappers.py` adapts both envs' plain list-indexed
+`reset()`/`step()` API to RLlib's dict-keyed `MultiAgentEnv` API, one
+independent `PolicySpec` per agent (no parameter sharing, matching the
+paper's own independence assumption), fcnet `[hidden_size, hidden_size]`
+matching Sec. 4's default network size. Observations are flattened and
+scaled to `[0, 1]` float32 rather than left as the raw `(3, 16, 21)`
+uint8 array `leibo2017/agents/dqn.py` uses directly: RLlib's default
+Catalog auto-detects any 3D Box as an image and tries to pick a default
+CNN, which has no preset for this shape and raises `ValueError` — flattening
+sidesteps that and keeps the same literal "MLP, not a described conv
+stack" reading used everywhere else in this repo.
+
 ## Known gaps from the paper
 
 - No attempt at the paper's actual 40,000,000-steps-per-condition training

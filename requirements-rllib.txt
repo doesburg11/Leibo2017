@@ -1,0 +1,4 @@
+# Optional extra -- NOT needed for the paper's own independent-DQN method
+# (that's requirements.txt). Only needed for run_rllib_train.py.
+# Tested against ray==2.58.0.
+ray[rllib]

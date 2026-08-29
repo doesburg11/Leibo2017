@@ -171,3 +171,59 @@ training across threads or processes sharing an agent, so there's no
 actual race to fix — noted here rather than silently dropped.
 
 All fixes have regression tests; 29/29 tests passing after this round.
+
+## 6. Optional RLlib backend added, then Codex-reviewed the same way
+
+`leibo2017/envs/rllib_wrappers.py` + `run_rllib_train.py` were added as a
+purely optional way to train the same `GatheringEnv`/`WolfpackEnv` with Ray
+RLlib (PPO/DQN) instead of the paper's own independent DQN — see the
+README's "Optional: RLlib backend" section. Both PPO and DQN were run
+live against Ray 2.58.0 (already installed in this environment via the
+sibling `SequentialSocialDilemmas` repo) for both games, end-to-end, before
+this was considered working — not just written and assumed correct.
+Two real API gotchas surfaced this way, not from reading docs: RLlib's
+default Catalog auto-detects any 3D `Box` observation as an image and
+tries to pick a default CNN, which has no preset for `[3, 16, 21]` and
+raises `ValueError` (fixed by flattening the observation, consistent with
+this repo's own literal-MLP reading of Sec. 4); and RLlib's multi-agent
+DQN on this version needs `replay_buffer_config={"type":
+"MultiAgentEpisodeReplayBuffer"}`, not the older `MultiAgentReplayBuffer`,
+which fails with an opaque `AttributeError` deep in Ray's internals
+(found by checking how `SequentialSocialDilemmas`'s own `train.py` gets
+DQN working on the same Ray version).
+
+Per standing project instructions, `codex exec` reviewed the new files
+independently and found two more real bugs, both fixed with regression
+tests:
+
+- **`env_config={"seed": ...}` was silently dropped.** Both
+  `make_gathering_rllib_env`/`make_wolfpack_rllib_env` stripped `"seed"`
+  out of the config dict before building the inner env, and never passed
+  it anywhere — so two envs built with the same seed still had independent,
+  unseeded RNG streams, and RLlib's own `reset(seed=...)` contract was a
+  no-op too. Fixed by threading the seed through to the inner env's `rng`
+  at construction, and reseeding `self._env.rng` directly whenever
+  `reset(seed=...)` is called.
+- **Gathering's `beam_use_rate` info was duplicated wholesale, not split
+  per agent.** Both RLlib agent ids' `info` dicts got an identical copy of
+  the *same 2-element list* `[rate_of_player_0, rate_of_player_1]`, rather
+  than each agent seeing its own scalar — exactly the kind of thing that
+  would silently corrupt a custom metrics callback averaging "the" beam
+  rate. Fixed with a small `_split_info` helper that unpacks any
+  per-agent-indexed list value to each agent's own entry, while leaving
+  genuinely global values (Wolfpack's `captures`/`avg_wolves_per_capture`)
+  shared identically across both, since they aren't agent-specific to
+  begin with.
+
+Two further Codex findings were reviewed and intentionally not changed,
+for reasons specific to this wrapper's design (documented in its own
+module docstring): `self.agents` staying constant for the whole episode
+is correct here, not a bug, because neither game ever removes an agent
+from RLlib's view mid-episode (a "tagged"/removed player still gets a
+turn and an observation every step inside the wrapped env); and a bare
+`KeyError` on a malformed action dict was left as-is, since RLlib itself
+is what supplies action dicts here and always supplies exactly the
+declared two-agent set — there's no real caller that could trigger it.
+
+38/38 tests passing after this round (9 of them RLlib-specific, skipped
+automatically via `pytest.importorskip("ray")` if `ray` isn't installed).
