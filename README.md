@@ -308,6 +308,10 @@ stack" reading used everywhere else in this repo.
 - No convolutional-network variant was tried; only the literal
   "two hidden layers, 32 units" MLP reading of Sec. 4.
 
+## Acknowledgments
+
+Developed with AI coding assistance from [Claude](https://claude.com/claude-code) (Anthropic), which does the implementation, with [Codex](https://openai.com/codex) (OpenAI) acting as an independent second opinion, peer-reviewing Claude's nontrivial code changes.
+
 ## References
 
 - Leibo, J. Z., Zambaldi, V., Lanctot, M., Marecki, J., & Graepel, T.
