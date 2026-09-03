@@ -323,6 +323,23 @@ CNN, which has no preset for this shape and raises `ValueError` — flattening
 sidesteps that and keeps the same literal "MLP, not a described conv
 stack" reading used everywhere else in this repo.
 
+`render_rllib_rollout.py` is the RLlib counterpart to `render_rollout.py`
+above: it trains the same `run_rllib_train.py` config, then rolls out one
+greedy episode and renders it to a GIF, printing per-agent return and the
+env's info dict (`captures`/`avg_wolves_per_capture` for Wolfpack,
+`beam_use_rate` for Gathering) along the way. The new API stack has no
+working `Algorithm.compute_single_action` for multi-agent envs, so it reads
+actions from each agent's trained `RLModule` directly — `Columns.ACTIONS`
+for DQN (already the greedy/exploit action), or a deterministic sample from
+`action_dist_inputs` for PPO.
+
+```bash
+python render_rllib_rollout.py --game wolfpack --algo PPO --iterations 10
+```
+
+Writes `<out-dir>/<game>_<algo>_rollout.gif` (default
+`output/render_rllib_rollout/`).
+
 ## Known gaps from the paper
 
 - No attempt at the paper's actual 40,000,000-steps-per-condition training

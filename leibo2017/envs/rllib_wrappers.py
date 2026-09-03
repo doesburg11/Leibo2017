@@ -100,6 +100,11 @@ class TwoPlayerRLlibEnv(MultiAgentEnv):
         obs_dict = {aid: self._flatten(o) for aid, o in zip(AGENT_IDS, obs)}
         return obs_dict, {aid: {} for aid in AGENT_IDS}
 
+    def render(self) -> np.ndarray:
+        """Passthrough to the wrapped env's global RGB frame, for rollout
+        visualization (see `render_rllib_rollout.py`)."""
+        return self._env.render()
+
     def step(self, action_dict):
         actions = [action_dict[aid] for aid in AGENT_IDS]
         obs, rewards, done, info = self._env.step(actions)
