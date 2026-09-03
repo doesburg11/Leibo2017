@@ -268,6 +268,24 @@ Each script writes a `results.json` and one or more `.png` figures to
 `python run_experiment1_gathering.py --help` (etc.) for the full set of
 sweep/step/seed overrides.
 
+## Rendering an episode
+
+`render_rollout.py` renders a played-out Gathering or Wolfpack episode to an
+animated GIF — the graphics-utility counterpart to the sibling
+SequentialSocialDilemmas repo's `visualization/visualizer_rllib.py`
+rollout-to-video tooling (there: RLlib rollout + OpenCV → `.mp4`; here: this
+repo's own env/agents + Pillow → `.gif`, no new heavy dependency). Both
+`GatheringEnv` and `WolfpackEnv` expose a `render()` method returning the
+same full-map RGB frame each already builds internally to construct agent
+observations, just not cropped/oriented to any one agent.
+
+```bash
+python render_rollout.py --game gathering --random-policy    # fast sanity check, no training
+python render_rollout.py --game wolfpack --total-steps 20000 # trains briefly, then renders a greedy rollout
+```
+
+Writes `<out-dir>/<game>_rollout.gif` (default `output/render_rollout/`).
+
 ## Optional: RLlib backend
 
 Everything above trains with `leibo2017/agents/dqn.py` — a direct,

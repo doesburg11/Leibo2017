@@ -24,6 +24,7 @@ from leibo2017.envs.grid_utils import (
     ROTATE_LEFT,
     ROTATE_RIGHT,
     STAND_STILL,
+    STEP_FORWARD,
     USE_BEAM,
     beam_cells,
     local_observation,
@@ -44,6 +45,7 @@ COLOR_APPLE = (0, 255, 0)
 COLOR_SELF = (0, 0, 255)
 COLOR_OPPONENT = (255, 0, 0)
 COLOR_BEAM = (255, 255, 0)
+COLOR_FACING_MARKER = (255, 255, 255)  # render()-only cue, not part of the observation encoding
 
 
 @dataclass
@@ -128,6 +130,7 @@ class GatheringEnv:
             _Player(row=r, col=c, orientation=o, start_row=r, start_col=c)
             for (r, c, o) in self._start_positions
         ]
+        self._last_beam_cells: list[tuple[int, int]] = []  # render()-only: cells hit by the most recent beam
         return self._observations()
 
     def _grid_occupancy(self) -> np.ndarray:
@@ -147,6 +150,29 @@ class GatheringEnv:
                 continue
             color = COLOR_SELF if i == viewer_idx else COLOR_OPPONENT
             rgb[p.row, p.col] = color
+        return rgb
+
+    def render(self) -> np.ndarray:
+        """Full-map RGB frame for third-person visualization (an (H, W, 3)
+        uint8 array) -- NOT the array agents observe (`_observations()`/
+        `_render_rgb()`, which stays exactly the paper's plain per-cell
+        color encoding and is never touched here). This starts from that
+        same base frame (viewer 0's self/opponent palette) and overlays two
+        purely-visual cues absent from the training observation: any beam
+        fired on the most recent `step()` (yellow) and each active player's
+        facing direction (a white marker one cell ahead) -- without these,
+        a rendered episode would just show two silently-teleporting dots,
+        hiding the tagging mechanic and all rotation actions."""
+        rgb = self._render_rgb(0).copy()
+        for (r, c) in self._last_beam_cells:
+            rgb[r, c] = COLOR_BEAM
+        for p in self.players:
+            if p.tagged_timer > 0:
+                continue
+            dr, dc = move_delta(p.orientation, STEP_FORWARD)
+            fr, fc = p.row + dr, p.col + dc
+            if self._static_grid[fr, fc] != WALL:
+                rgb[fr, fc] = COLOR_FACING_MARKER
         return rgb
 
     def _observations(self) -> tuple[np.ndarray, np.ndarray]:
@@ -238,6 +264,8 @@ class GatheringEnv:
                 if p.tagged_timer == 0:
                     p.row, p.col = self._find_free_cell(p.start_row, p.start_col, active_cells)
                     active_cells.add((p.row, p.col))
+
+        self._last_beam_cells = [cell for _, cells in beams_fired for cell in cells]  # render()-only
 
         self._t += 1
         done = self._t >= cfg.episode_length

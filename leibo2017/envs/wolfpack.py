@@ -25,6 +25,7 @@ from leibo2017.envs.grid_utils import (
     ROTATE_LEFT,
     ROTATE_RIGHT,
     STAND_STILL,
+    STEP_FORWARD,
     USE_BEAM,
     local_observation,
     move_delta,
@@ -36,6 +37,7 @@ COLOR_WALL = (128, 128, 128)
 COLOR_SELF = (0, 0, 255)
 COLOR_TEAMMATE = (100, 180, 255)  # "light-blue in its teammate's view" (Sec. 4)
 COLOR_PREY = (255, 0, 0)
+COLOR_FACING_MARKER = (255, 255, 255)  # render()-only cue, not part of the observation encoding
 
 
 @dataclass
@@ -98,6 +100,24 @@ class WolfpackEnv:
         for i, wf in enumerate(self.wolves):
             rgb[wf["row"], wf["col"]] = COLOR_SELF if i == viewer_idx else COLOR_TEAMMATE
         rgb[self.prey["row"], self.prey["col"]] = COLOR_PREY
+        return rgb
+
+    def render(self) -> np.ndarray:
+        """Full-map RGB frame for third-person visualization (an (H, W, 3)
+        uint8 array) -- NOT the array wolves observe (`_observations()`/
+        `_render_rgb()`, which stays exactly the paper's plain per-cell
+        color encoding and is never touched here). This starts from that
+        same base frame (viewer 0's self/teammate palette) and overlays one
+        purely-visual cue absent from the training observation: each wolf's
+        facing direction (a white marker one cell ahead) -- without it, a
+        rendered chase would just show dots sliding around with no sense of
+        which way anyone is actually facing."""
+        rgb = self._render_rgb(0).copy()
+        for w in self.wolves:
+            dr, dc = move_delta(w["orientation"], STEP_FORWARD)
+            fr, fc = w["row"] + dr, w["col"] + dc
+            if self._static_grid[fr, fc] != WALL:
+                rgb[fr, fc] = COLOR_FACING_MARKER
         return rgb
 
     def _observations(self):
