@@ -38,7 +38,8 @@ def greedy_actions(module_dict, obs_dict):
     actions = {}
     for aid, obs in obs_dict.items():
         module = module_dict[aid]
-        batch = {"obs": torch.from_numpy(np.asarray(obs, dtype=np.float32)[None, :])}
+        device = next(module.parameters()).device
+        batch = {"obs": torch.from_numpy(np.asarray(obs, dtype=np.float32)[None, :]).to(device)}
         fwd_out = module.forward_inference(batch)
         if "actions" in fwd_out:
             actions[aid] = int(fwd_out["actions"][0])
@@ -62,22 +63,39 @@ def main():
     ap.add_argument("--scale", type=int, default=8, help="Pixel upscale factor per grid cell.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out-dir", type=str, default="output/render_rllib_rollout")
+    ap.add_argument("--num-env-runners", type=int, default=0, help="Parallel remote rollout workers (each its own env instance + CPU). 0 = single local process (default).")
+    ap.add_argument("--gpu", action="store_true", help="Train the (tiny) network on GPU instead of CPU.")
+    ap.add_argument("--checkpoint-dir", type=str, default=None,
+                     help="Where to save the trained policies (algo.save()) before rendering the eval "
+                          "rollout. Defaults to output/rllib_checkpoints/<game>_<algo>/.")
     args = ap.parse_args()
 
     render_episode_length = args.render_episode_length or args.episode_length
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_dir = Path(args.checkpoint_dir or f"output/rllib_checkpoints/{args.game}_{args.algo.lower()}").resolve()
 
     ray.init(include_dashboard=False, logging_level="ERROR")
+    algo = None
     try:
-        config = build_config(args.game, args.algo, args.episode_length, args.hidden_size)
+        config = build_config(
+            args.game, args.algo, args.episode_length, args.hidden_size,
+            num_env_runners=args.num_env_runners, num_gpus_per_learner=1 if args.gpu else 0,
+        )
         algo = config.build()
         for i in range(1, args.iterations + 1):
             result = algo.train()
             env_runners = result.get("env_runners", {})
             print(f"iter {i:3d}  episode_return_mean={env_runners.get('episode_return_mean'):.3f}")
 
-        module_dict = algo.env_runner.module
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        algo.save(checkpoint_dir=str(checkpoint_dir))
+        print(f"Saved checkpoint to {checkpoint_dir}")
+
+        # get_module() (not env_runner.module directly) since with
+        # --num-env-runners > 0 there's no local env runner to read from --
+        # it fetches the trained module from a remote env runner instead.
+        module_dict = {aid: algo.get_module(aid) for aid in AGENT_IDS}
 
         env = ENV_FACTORIES[args.game]({"episode_length": render_episode_length, "seed": args.seed})
         obs_dict, _ = env.reset(seed=args.seed)
@@ -94,6 +112,12 @@ def main():
             frames.append(env.render())
             done = terminations["__all__"] or truncations["__all__"]
     finally:
+        # Releases the algorithm's remote env-runner/learner actors and GPU
+        # state gracefully -- with --num-env-runners/--gpu it owns more than
+        # just local-process memory, so this matters beyond ray.shutdown()
+        # alone (which force-tears-down anything still attached).
+        if algo is not None:
+            algo.stop()
         ray.shutdown()
 
     out_path = out_dir / f"{args.game}_{args.algo.lower()}_rollout.gif"

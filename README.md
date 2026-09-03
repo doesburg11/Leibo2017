@@ -308,8 +308,25 @@ up would need a custom RLlib callback, not built here).
 ```bash
 pip install -r requirements-rllib.txt   # ray[rllib]; tested against ray==2.58.0
 python run_rllib_train.py --game gathering --algo PPO --iterations 10
-python run_rllib_train.py --game wolfpack --algo DQN --iterations 10
+python run_rllib_train.py --game wolfpack --algo DQN --iterations 10 --num-env-runners 30 --gpu
 ```
+
+By default training is single-process (`num_env_runners=0`, matching the
+paper's tiny-scale setup) and CPU-only. `--num-env-runners N` parallelizes
+env rollouts across `N` remote workers (real speedup, since env stepping is
+usually the bottleneck for envs this small); `--gpu` puts the (also tiny,
+2×32-unit) network's training on GPU, which the model is too small to
+benefit from much but doesn't hurt either.
+
+Both scripts call `algo.save(checkpoint_dir=...)` when training finishes,
+to `output/rllib_checkpoints/<game>_<algo>/` by default (override with
+`--checkpoint-dir`). This is a real, reloadable RLlib checkpoint (model
+weights included) — distinct from `Algorithm.build()`'s own
+`~/ray_results/<timestamp>/` trial directory, which Ray creates as a side
+effect regardless and stays empty here: `algorithm_state.pkl`,
+`.../rl_module/module_state.pkl` etc. only get written by this explicit
+`algo.save()` call, or by driving training through a `ray.tune.Tuner` (not
+what these scripts do) instead of a manual `algo.train()` loop.
 
 `leibo2017/envs/rllib_wrappers.py` adapts both envs' plain list-indexed
 `reset()`/`step()` API to RLlib's dict-keyed `MultiAgentEnv` API, one
@@ -338,7 +355,8 @@ python render_rllib_rollout.py --game wolfpack --algo PPO --iterations 10
 ```
 
 Writes `<out-dir>/<game>_<algo>_rollout.gif` (default
-`output/render_rllib_rollout/`).
+`output/render_rllib_rollout/`) and, like `run_rllib_train.py`, saves a
+checkpoint to `output/rllib_checkpoints/<game>_<algo>/` before rendering.
 
 ## Known gaps from the paper
 
