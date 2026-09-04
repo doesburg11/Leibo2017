@@ -65,6 +65,30 @@ def main():
     ap.add_argument("--out-dir", type=str, default="output/render_rllib_rollout")
     ap.add_argument("--num-env-runners", type=int, default=0, help="Parallel remote rollout workers (each its own env instance + CPU). 0 = single local process (default).")
     ap.add_argument("--gpu", action="store_true", help="Train the (tiny) network on GPU instead of CPU.")
+    ap.add_argument("--train-batch-size", type=int, default=None,
+                     help="Samples per gradient update. Defaults to 32 for DQN, max(200, 4*episode_length) "
+                          "for PPO. DQN's default of 32 is a low update-to-data ratio once "
+                          "--num-env-runners collects far more env steps per iteration than that.")
+    ap.add_argument("--epsilon-timesteps", type=int, default=None,
+                     help="DQN only: global env steps over which epsilon decays 1.0 -> 0.05. Defaults to "
+                          "10,000 scaled by the actual steps-per-algo.train()-iteration ratio vs. "
+                          "--num-env-runners=0 (not num_env_runners itself -- DQN's own "
+                          "min_sample_timesteps_per_iteration=1000 means e.g. 30 env runners collects "
+                          "6000 steps/iteration, a 6x ratio, not 30x), preserving RLlib's own "
+                          "single-runner decay cadence in iteration terms.")
+    ap.add_argument("--target-network-update-freq", type=int, default=None,
+                     help="DQN only: global env steps between target-network hard updates. Defaults to "
+                          "500 scaled the same way as --epsilon-timesteps.")
+    ap.add_argument("--updates-per-iteration", type=int, default=None,
+                     help="DQN only: gradient updates per algo.train() call (int >= 1), via "
+                          "training_intensity. RLlib's own default (unset) always does exactly 1 "
+                          "update/iteration REGARDLESS of --train-batch-size, --episode-length, or "
+                          "--num-env-runners -- e.g. 1000 iterations trains the network on only 1000 "
+                          "total batches no matter how much data got collected. Set this explicitly to "
+                          "actually use collected data for training instead of leaving most of it "
+                          "unreplayed each iteration. Large values raise the replay ratio (samples "
+                          "reused vs. freshly collected) -- can overfit/destabilize DQN if pushed too "
+                          "high, same as any replay-ratio hyperparameter.")
     ap.add_argument("--checkpoint-dir", type=str, default=None,
                      help="Where to save the trained policies (algo.save()) before rendering the eval "
                           "rollout. Defaults to output/rllib_checkpoints/<game>_<algo>/.")
@@ -81,6 +105,9 @@ def main():
         config = build_config(
             args.game, args.algo, args.episode_length, args.hidden_size,
             num_env_runners=args.num_env_runners, num_gpus_per_learner=1 if args.gpu else 0,
+            train_batch_size=args.train_batch_size,
+            epsilon_timesteps=args.epsilon_timesteps, target_network_update_freq=args.target_network_update_freq,
+            updates_per_iteration=args.updates_per_iteration,
         )
         algo = config.build()
         for i in range(1, args.iterations + 1):

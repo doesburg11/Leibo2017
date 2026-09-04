@@ -318,6 +318,34 @@ usually the bottleneck for envs this small); `--gpu` puts the (also tiny,
 2×32-unit) network's training on GPU, which the model is too small to
 benefit from much but doesn't hurt either.
 
+For DQN, `--epsilon-timesteps`/`--target-network-update-freq` and
+`--updates-per-iteration` correct two easy-to-miss defaults once
+`--num-env-runners` is on:
+
+- `epsilon`'s decay-to-floor timestep and `target_network_update_freq` are
+  both counted in *global* env steps, which scale with `num_env_runners`.
+  RLlib's raw defaults (10,000 / 500) implicitly assume a single env
+  runner, so left unscaled, `--num-env-runners 30` collapses exploration
+  to its floor by iteration ~2 of 1000 instead of the intended ~10, and
+  hard-updates the target network multiple times per iteration instead of
+  every ~0.5. `build_config()` auto-scales both by the actual measured
+  steps-per-`algo.train()`-call ratio vs. `--num-env-runners=0` (not by
+  `num_env_runners` directly — DQN's own
+  `min_sample_timesteps_per_iteration=1000` makes that ratio 6x at 30
+  runners, not 30x), reproducing today's exact behavior at
+  `--num-env-runners 0`. Override either directly if needed.
+- Separately, and more impactful: with `training_intensity` left unset
+  (RLlib's own default), `calculate_rr_weights()` always does **exactly
+  one gradient update per `algo.train()` call**, regardless of
+  `--train-batch-size`, `--episode-length`, or `--num-env-runners` --
+  confirmed empirically. 1000 iterations trains the network on only 1000
+  total batches no matter how much data got collected each iteration.
+  `--updates-per-iteration K` sets `training_intensity` so exactly `K`
+  gradient updates happen per `algo.train()` call instead (verified exact
+  at `--num-env-runners` 0, 5, and 30). Large `K` raises the replay ratio
+  (samples reused vs. freshly collected) -- a real DQN hyperparameter that
+  can overfit/destabilize if pushed too high, not a free win.
+
 Both scripts call `algo.save(checkpoint_dir=...)` when training finishes,
 to `output/rllib_checkpoints/<game>_<algo>/` by default (override with
 `--checkpoint-dir`). This is a real, reloadable RLlib checkpoint (model
