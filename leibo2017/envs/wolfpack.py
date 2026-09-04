@@ -38,6 +38,7 @@ COLOR_SELF = (0, 0, 255)
 COLOR_TEAMMATE = (100, 180, 255)  # "light-blue in its teammate's view" (Sec. 4)
 COLOR_PREY = (255, 0, 0)
 COLOR_FACING_MARKER = (255, 255, 255)  # render()-only cue, not part of the observation encoding
+COLOR_CAPTURE_FLASH = (255, 215, 0)  # render()-only cue: the cell a capture just happened in
 
 
 @dataclass
@@ -91,6 +92,7 @@ class WolfpackEnv:
         self.prey = {"row": h // 2, "col": w // 2}
         self.captures = 0
         self.wolves_per_capture_sum = 0
+        self._last_capture_cell: tuple[int, int] | None = None  # render()-only: cell of the most recent capture
         return self._observations()
 
     def _render_rgb(self, viewer_idx: int) -> np.ndarray:
@@ -107,17 +109,22 @@ class WolfpackEnv:
         uint8 array) -- NOT the array wolves observe (`_observations()`/
         `_render_rgb()`, which stays exactly the paper's plain per-cell
         color encoding and is never touched here). This starts from that
-        same base frame (viewer 0's self/teammate palette) and overlays one
-        purely-visual cue absent from the training observation: each wolf's
-        facing direction (a white marker one cell ahead) -- without it, a
-        rendered chase would just show dots sliding around with no sense of
-        which way anyone is actually facing."""
+        same base frame (viewer 0's self/teammate palette) and overlays two
+        purely-visual cues absent from the training observation: each
+        wolf's facing direction (a white marker one cell ahead) -- without
+        it, a rendered chase would just show dots sliding around with no
+        sense of which way anyone is actually facing -- and a gold flash on
+        the cell the most recent capture happened in, since the prey
+        respawning elsewhere the very same frame would otherwise make a
+        catch easy to miss."""
         rgb = self._render_rgb(0).copy()
         for w in self.wolves:
             dr, dc = move_delta(w["orientation"], STEP_FORWARD)
             fr, fc = w["row"] + dr, w["col"] + dc
             if self._static_grid[fr, fc] != WALL:
                 rgb[fr, fc] = COLOR_FACING_MARKER
+        if self._last_capture_cell is not None:
+            rgb[self._last_capture_cell] = COLOR_CAPTURE_FLASH
         return rgb
 
     def _observations(self):
@@ -187,8 +194,10 @@ class WolfpackEnv:
                 capturer = i
                 break
 
+        self._last_capture_cell = None
         if capturer is not None:
             pr, pc = self.prey["row"], self.prey["col"]
+            self._last_capture_cell = (pr, pc)
             in_radius = [
                 (abs(w["row"] - pr) + abs(w["col"] - pc)) <= cfg.capture_radius for w in self.wolves
             ]
