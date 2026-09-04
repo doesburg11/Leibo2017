@@ -139,33 +139,53 @@ run that classification at meaningful scale for Wolfpack specifically
 (see the top-level `RESULTS.md`'s EGTA section), so which of these five
 outcomes this implementation's defaults actually land in is still open.
 
-## Training result: consistent coordination emerged
+## Training result: consistent coordination emerged, then converged
 
 Trained with Ray RLlib's DQN backend (optional, additive to this repo's
 own from-scratch independent-DQN implementation — see the top-level
 README's "Optional: RLlib backend" section, [`run_rllib_train.py`](../../../run_rllib_train.py)
-and [`render_rllib_rollout.py`](../../../render_rllib_rollout.py)), 10,000
-iterations, 30 parallel env runners, GPU-backed learner:
+and [`render_rllib_rollout.py`](../../../render_rllib_rollout.py)), 30
+parallel env runners, GPU-backed learner, run once to 10,000 iterations
+and then again to 20,000 with identical settings to see whether the
+still-rising 10k curve kept climbing or was already leveling off:
 
 | iterations | mean episode return | eval capture rate |
 |---|---|---|
-| 1–1,000 | 2.67 | — |
-| 9,001–10,000 | **76.04** | **11 captures/episode, every one a coordinated 2-wolf catch** |
+| 1–1,000 | 1.94 | — |
+| 2,001–3,000 | 55.05 | — |
+| 9,001–10,000 | 75.41 | 11 captures/episode, `avg_wolves_per_capture=2.0` |
+| 14,001–15,000 | 77.95 | — |
+| 19,001–20,000 | **78.97** | **11 captures/episode, `avg_wolves_per_capture=1.91`** |
 
-The final greedy eval episode: **11/11 captures with `avg_wolves_per_capture=2.0`** —
-never once a solo grab. Both wolves earned `r_team` (5.0 × 11 = 55.0 each)
-every single time. Whatever the underlying dynamics turn out to be, this
-particular trained policy consistently positioned both wolves together
-before every capture rather than settling for solo grabs along the way —
-that's a real, observed behavior, whether or not it reflects overcoming a
-genuine dilemma in the game-theoretic sense discussed above.
+It was leveling off, not still climbing: the first 10,000 iterations
+gained ~73 points of mean return (1.9 → 75.4); the *second* 10,000 gained
+only ~3.6 more (75.4 → 79.0) — a steep climb through roughly iteration
+3,000, then a long, slow, decelerating approach toward what looks like an
+asymptote around 80. The 10k run wasn't wrong to look like it was "still
+climbing" at the time, but the growth was already well into diminishing
+returns by then, not on a trajectory that would have kept climbing
+indefinitely with more iterations at this same configuration.
+
+The eval episode rendered below is from the 10,000-iteration checkpoint:
+**11/11 captures with `avg_wolves_per_capture=2.0`** — never once a solo
+grab, both wolves earning `r_team` (5.0 × 11 = 55.0 each) every single
+time. The 20,000-iteration checkpoint's own eval episode also landed 11
+captures, just one shy of a perfect 2.0 average (`avg_wolves_per_capture=1.91`) —
+consistent with "converged to mostly-but-not-perfectly coordinated,"
+matching the mean-return plateau above rather than continued improvement.
+Whatever the underlying dynamics turn out to be, both checkpoints
+consistently positioned both wolves together before nearly every capture
+rather than settling for solo grabs along the way — that's a real,
+observed behavior, whether or not it reflects overcoming a genuine
+dilemma in the game-theoretic sense discussed above.
 
 ![Wolfpack eval rollout, 11 coordinated captures](wolfpack_captures_demo.gif)
 
-*Gold flash marks the exact frame of each capture (the prey respawning
-elsewhere the same frame would otherwise make a catch easy to miss in the
-animation); the white marker one cell ahead of each wolf shows its facing
-direction — see `render()` in `wolfpack.py`.*
+*From the 10,000-iteration checkpoint. Gold flash marks the exact frame
+of each capture (the prey respawning elsewhere the same frame would
+otherwise make a catch easy to miss in the animation); the white marker
+one cell ahead of each wolf shows its facing direction — see `render()`
+in `wolfpack.py`.*
 
 ### Getting there took three fixes, not just more compute
 
@@ -177,8 +197,9 @@ iteration** regardless of how much data gets collected — so 1,000
 iterations trained the network on only 1,000 total batches, no matter how
 many parallel env runners were collecting experience. Setting
 `--updates-per-iteration 20` (an explicit `training_intensity`) was the
-single change that turned a flat, noisy ~0.1 mean return into a steep,
-still-climbing curve reaching 76+ by iteration 10,000. Two smaller,
+single change that turned a flat, noisy ~0.1 mean return into a steep
+climb reaching 76+ by iteration 10,000, then leveling off around ~79 by
+iteration 20,000 (see above). Two smaller,
 related fixes (correctly scaling DQN's epsilon-decay schedule and
 target-network update frequency for parallel env runners, both of which
 silently assumed a single env runner) compounded on top of that. See the
@@ -196,4 +217,6 @@ python render_rllib_rollout.py --game wolfpack --algo DQN \
 
 Saves a checkpoint to `~/simulation_results/ray_results/DQN_Leibo2017_Wolfpack_<timestamp>/`
 and renders a greedy eval episode to
-`output/render_rllib_rollout/wolfpack_dqn_rollout.gif`.
+`output/render_rllib_rollout/wolfpack_dqn_rollout.gif`. Use
+`--iterations 20000` to reproduce the full run above, including the
+plateau in the second half.
