@@ -16,6 +16,7 @@ Requires `ray[rllib]` (`pip install -r requirements-rllib.txt`), not part
 of the base install.
 """
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 import ray
@@ -27,6 +28,22 @@ from ray.tune.registry import register_env
 from leibo2017.envs.rllib_wrappers import AGENT_IDS, make_gathering_rllib_env, make_wolfpack_rllib_env
 
 ENV_FACTORIES = {"gathering": make_gathering_rllib_env, "wolfpack": make_wolfpack_rllib_env}
+
+# Checkpoints default outside the repo entirely, in the user's centralized
+# cross-project results directory -- NOT output/ (git-ignored but still
+# repo-local, easy to lose track of) and NOT Ray's own default
+# ~/ray_results/ (that's Ray-tool-specific and would leave this repo's
+# results ungrouped from every other project's). Follows the same
+# <ALGO>_<tag>_<timestamp> naming convention already used by ~90 existing
+# entries there from other projects (PredPreyGrass, EvolvedCooperation,
+# ...), with "Leibo2017" as the project tag so results stay attributable.
+_RESULTS_ROOT = Path.home() / "simulation_results" / "ray_results"
+
+
+def default_checkpoint_dir(game: str, algo: str) -> Path:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return _RESULTS_ROOT / f"{algo}_Leibo2017_{game.capitalize()}_{timestamp}"
+
 
 # RLlib's own DQNConfig defaults for `epsilon`'s decay-to-floor timestep and
 # `target_network_update_freq` -- both counted in *global* env steps sampled
@@ -167,12 +184,13 @@ def main():
                           "high, same as any replay-ratio hyperparameter.")
     ap.add_argument("--checkpoint-dir", type=str, default=None,
                      help="Where to save the trained policies (algo.save()) when training finishes. "
-                          "Defaults to output/rllib_checkpoints/<game>_<algo>/. "
+                          "Defaults to ~/simulation_results/ray_results/<ALGO>_Leibo2017_<Game>_"
+                          "<timestamp>/ (outside the repo -- see default_checkpoint_dir()). "
                           "Ray's own ~/ray_results/<timestamp>/ trial dir is NOT a checkpoint -- "
                           "it stays empty unless you go through this (or a ray.tune.Tuner run).")
     args = ap.parse_args()
 
-    checkpoint_dir = Path(args.checkpoint_dir or f"output/rllib_checkpoints/{args.game}_{args.algo.lower()}").resolve()
+    checkpoint_dir = Path(args.checkpoint_dir).resolve() if args.checkpoint_dir else default_checkpoint_dir(args.game, args.algo)
 
     ray.init(include_dashboard=False, logging_level="ERROR")
     algo = None

@@ -347,11 +347,14 @@ For DQN, `--epsilon-timesteps`/`--target-network-update-freq` and
   can overfit/destabilize if pushed too high, not a free win.
 
 Both scripts call `algo.save(checkpoint_dir=...)` when training finishes,
-to `output/rllib_checkpoints/<game>_<algo>/` by default (override with
-`--checkpoint-dir`). This is a real, reloadable RLlib checkpoint (model
-weights included) — distinct from `Algorithm.build()`'s own
-`~/ray_results/<timestamp>/` trial directory, which Ray creates as a side
-effect regardless and stays empty here: `algorithm_state.pkl`,
+to `~/simulation_results/ray_results/<ALGO>_Leibo2017_<Game>_<timestamp>/`
+by default (`default_checkpoint_dir()` in `run_rllib_train.py`; override
+with `--checkpoint-dir`) — outside the repo entirely, in a user-level
+directory shared across projects, not `output/` (git-ignored but still
+repo-local and easy to lose track of). This is a real, reloadable RLlib
+checkpoint (model weights included) — distinct from `Algorithm.build()`'s
+own `~/ray_results/<timestamp>/` trial directory, which Ray creates as a
+side effect regardless and stays empty here: `algorithm_state.pkl`,
 `.../rl_module/module_state.pkl` etc. only get written by this explicit
 `algo.save()` call, or by driving training through a `ray.tune.Tuner` (not
 what these scripts do) instead of a manual `algo.train()` loop.
@@ -383,8 +386,10 @@ python render_rllib_rollout.py --game wolfpack --algo PPO --iterations 10
 ```
 
 Writes `<out-dir>/<game>_<algo>_rollout.gif` (default
-`output/render_rllib_rollout/`) and, like `run_rllib_train.py`, saves a
-checkpoint to `output/rllib_checkpoints/<game>_<algo>/` before rendering.
+`output/render_rllib_rollout/`; this one GIF is a repo-local artifact,
+fine to leave git-ignored) and, like `run_rllib_train.py`, saves a
+checkpoint to `~/simulation_results/ray_results/<ALGO>_Leibo2017_<Game>_
+<timestamp>/` before rendering.
 
 ## Known gaps from the paper
 

@@ -22,7 +22,7 @@ import torch
 
 from leibo2017.envs.rllib_wrappers import AGENT_IDS
 from leibo2017.plotting.video import save_rollout_gif
-from run_rllib_train import ENV_FACTORIES, build_config
+from run_rllib_train import ENV_FACTORIES, build_config, default_checkpoint_dir
 
 
 def greedy_actions(module_dict, obs_dict):
@@ -91,13 +91,14 @@ def main():
                           "high, same as any replay-ratio hyperparameter.")
     ap.add_argument("--checkpoint-dir", type=str, default=None,
                      help="Where to save the trained policies (algo.save()) before rendering the eval "
-                          "rollout. Defaults to output/rllib_checkpoints/<game>_<algo>/.")
+                          "rollout. Defaults to ~/simulation_results/ray_results/<ALGO>_Leibo2017_"
+                          "<Game>_<timestamp>/ (outside the repo -- see default_checkpoint_dir()).")
     args = ap.parse_args()
 
     render_episode_length = args.render_episode_length or args.episode_length
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_dir = Path(args.checkpoint_dir or f"output/rllib_checkpoints/{args.game}_{args.algo.lower()}").resolve()
+    checkpoint_dir = Path(args.checkpoint_dir).resolve() if args.checkpoint_dir else default_checkpoint_dir(args.game, args.algo)
 
     ray.init(include_dashboard=False, logging_level="ERROR")
     algo = None
