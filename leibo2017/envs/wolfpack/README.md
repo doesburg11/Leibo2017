@@ -7,7 +7,7 @@ of the prey *at that moment* shares a reward of `r_team`; a wolf that
 captures alone, with its partner too far away, gets the smaller `r_lone`
 instead (partner gets nothing). The prey then respawns and the episode
 continues. This is Leibo et al. (2017)'s Sec. 5.2 game — see
-[`__init__.py`](__init__.py) for the exact mechanics and reward values
+[`wolfpack.py`](wolfpack.py) for the exact mechanics and reward values
 (`r_team=5.0`, `r_lone=1.0` by default).
 
 ## Is this actually a social dilemma?
@@ -165,7 +165,7 @@ genuine dilemma in the game-theoretic sense discussed above.
 *Gold flash marks the exact frame of each capture (the prey respawning
 elsewhere the same frame would otherwise make a catch easy to miss in the
 animation); the white marker one cell ahead of each wolf shows its facing
-direction — see `render()` in `__init__.py`.*
+direction — see `render()` in `wolfpack.py`.*
 
 ### Getting there took three fixes, not just more compute
 
