@@ -10,73 +10,66 @@ continues. This is Leibo et al. (2017)'s Sec. 5.2 game — see
 [`__init__.py`](__init__.py) for the exact mechanics and reward values
 (`r_team=5.0`, `r_lone=1.0` by default).
 
-## The dilemma: Stag Hunt, not Prisoner's Dilemma
+## Is this actually a social dilemma?
+
+Open question — not settled by anything measured in this repo. Worth
+being precise about what would actually have to be true for it to count.
+
+**There's no explicit cooperate/defect action.** A wolf chooses an action
+every step — move, rotate, or stand still (the action space also includes
+a beam-use action, but Wolfpack gives it no effect, kept only so both
+games share one action space) — and ends up capturing the prey whenever
+its final position overlaps the prey's *after* both have moved that step
+(see `step()`), not via any dedicated "capture" action. Landing on the
+prey alone still pays `r_lone > 0`, so there's no discrete moment where a
+wolf gives something up by capturing solo, unlike Gathering's tagging
+beam (an explicit, costly, unambiguously aggressive action). So if you're
+looking for a tempting alternative move a wolf could make instead of
+cooperating, there isn't one at the single-action level.
+
+**The paper's own narrative motivation** (Sec. 5.2) is a pack-hunting SSD
+where a coordinated capture pays more than a solo one — not a claim that
+Wolfpack is *always* a Stag Hunt specifically. The paper's own reported
+experiments have Wolfpack's empirical classification vary with parameters
+like capture radius and the group-capture bonus, landing in Chicken,
+Stag Hunt, or Prisoner's Dilemma territory depending on the setting — and
+`r_team > r_lone` alone doesn't determine that: `egta.py`'s `R`/`P` are
+measured *episode returns* under actual trained policies, not the raw
+per-capture reward values, so capture-rate differences between policy
+types can outweigh the reward ratio. The Stag Hunt story requires one
+further thing to actually hold: that pursuing solo captures costs a wolf
+future joint-capture opportunities (drifting away from its partner to
+chase alone), so that waiting/coordinating risks ending up with nothing
+if the partner doesn't reciprocate (`fear = P − S > 0`). That "if" is
+doing all the work and is exactly the part this repo hasn't verified for
+this implementation's specific defaults.
+
+**Why the skeptical reading is reasonable**: since capturing solo never
+costs anything in the moment, the only way "chasing solo" can actually be
+a worse *strategy* is if it has a real opportunity cost — spending time
+away from your partner instead of positioned for a joint capture. Whether
+that opportunity cost is large enough to make solo-rushing a genuine
+temptation, or whether "grab the prey whenever you're near it" is just
+weakly dominant with no real trade-off either way, is an empirical
+question about this specific environment's dynamics (map size, prey
+speed, capture radius), not something derivable from the reward ratio
+alone.
 
 [`leibo2017/analysis/egta.py`](../../analysis/egta.py) implements the
-paper's own classification scheme (Sec. 2.2): play trained
-cooperator-pool and defector-pool policies against each other, average
-the resulting returns into an *empirical* payoff matrix `(R, P, S, T)`,
-then classify it as **Stag Hunt** specifically when `R > P` and
-`fear = P − S > 0` and `greed = T − R ≤ 0` (`PayoffEstimate.classify()`).
-This repo hasn't run that classification at meaningful scale for
-Wolfpack specifically yet (see the top-level `RESULTS.md`'s EGTA section) —
-what follows is the *expected* classification, reasoning from the reward
-structure itself rather than a measured result:
+paper's own way to actually answer this: play trained cooperator-pool and
+defector-pool policies against each other, average the resulting returns
+into an *empirical* payoff matrix `(R, P, S, T)`, and classify it
+(`PayoffEstimate.classify()`) as `R ≤ P` → "Non-SSD (R<P)" (no dilemma:
+mutual cooperation isn't even better than mutual defection); else, among
+`R > P` outcomes, `fear ≤ 0` and `greed ≤ 0` → "Non-SSD (R>P)" (no
+dilemma: cooperation is better and neither risk nor temptation pulls
+anyone away from it); `fear > 0`, `greed ≤ 0` → **Stag Hunt**; `fear ≤ 0`,
+`greed > 0` → Chicken; both `> 0` → Prisoner's Dilemma. This repo hasn't
+run that classification at meaningful scale for Wolfpack specifically
+(see the top-level `RESULTS.md`'s EGTA section), so which of these five
+outcomes this implementation's defaults actually land in is still open.
 
-Mapping "cooperate" = hunt together, "defect" = rush off and chase the
-prey solo:
-
-- **No greed problem expected**: betraying a cooperating partner
-  shouldn't pay *more* than mutual cooperation would —
-  `r_lone (1.0) < r_team (5.0)`. There's no individual incentive to
-  defect against a partner who's playing along; team capture is
-  strictly the better outcome whenever it's achievable.
-- **Real fear problem expected**: if you hang back to coordinate with
-  your partner but *they* go solo, you get nothing — the sucker's
-  payoff, since only the wolf that touches the prey (and whoever else is
-  in radius) gets rewarded. Whereas if you *also* just chase solo
-  (mutual defection), you at least sometimes grab the lone reward
-  yourself.
-
-So the incentive to go it alone isn't greed, it's risk-aversion:
-coordinating requires trusting your partner will also commit to the joint
-hunt, and if that trust is misplaced you walk away empty-handed. Going
-solo is a lower-but-safer payoff — exactly the "stag vs. hare" trade-off
-the Stag Hunt is named for: hunting the stag (team capture) together
-yields more for everyone, but only if both commit; hunting hare alone
-(`r_lone`) is worse, but doesn't depend on anyone else showing up.
-
-### Is Stag Hunt actually a social dilemma?
-
-Yes — by the paper's own four-way classification that `egta.py`
-implements (Prisoner's Dilemma / Chicken / Stag Hunt / non-SSD), Stag
-Hunt is one of the three dilemma categories, not the "no dilemma" case.
-Only "Non-SSD" (`R ≤ P`, or `R > P` with neither fear nor greed) means
-there's no dilemma at all.
-
-What makes it a dilemma even without greed: `R > P` — mutual cooperation
-(both wolves committing to the joint hunt) is collectively better than
-mutual defection (both going solo). That's the baseline requirement for
-*any* social dilemma. On top of that, Stag Hunt adds `fear > 0`: a wolf
-that commits to coordinating risks getting nothing if its partner doesn't
-reciprocate. So even though no individual wolf ever benefits from
-*betraying* a cooperating partner (that's what rules out greed), a purely
-self-interested, risk-averse wolf can still rationally choose the safer,
-lower-value solo strategy out of uncertainty about its partner — and if
-both wolves reason that way, they land on the collectively worse
-mutual-defection outcome despite mutual cooperation being available and
-better for both.
-
-That's the technical distinction from Prisoner's Dilemma: PD gives every
-player a dominant strategy to defect regardless of what the other player
-does (fear *and* greed). Stag Hunt has *two* stable equilibria —
-both-cooperate and both-defect — and the dilemma is a coordination/trust
-problem: which equilibrium do you converge on when you can't be sure of
-your partner. It's sometimes called an "assurance game" for exactly that
-reason. Still very much a social dilemma, just one solved by building
-trust/coordination rather than by removing temptation.
-
-## Training result: learning to trust the stag hunt
+## Training result: consistent coordination emerged
 
 Trained with Ray RLlib's DQN backend (optional, additive to this repo's
 own from-scratch independent-DQN implementation — see the top-level
@@ -91,9 +84,11 @@ iterations, 30 parallel env runners, GPU-backed learner:
 
 The final greedy eval episode: **11/11 captures with `avg_wolves_per_capture=2.0`** —
 never once a solo grab. Both wolves earned `r_team` (5.0 × 11 = 55.0 each)
-every single time. That's what "learning to trust the stag hunt" looks
-like empirically: the policy converged to *always* coordinating rather
-than ever settling for the safer, lower-value solo capture.
+every single time. Whatever the underlying dynamics turn out to be, this
+particular trained policy consistently positioned both wolves together
+before every capture rather than settling for solo grabs along the way —
+that's a real, observed behavior, whether or not it reflects overcoming a
+genuine dilemma in the game-theoretic sense discussed above.
 
 ![Wolfpack eval rollout, 11 coordinated captures](wolfpack_captures_demo.gif)
 
