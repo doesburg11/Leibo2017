@@ -46,6 +46,36 @@ the Stag Hunt is named for: hunting the stag (team capture) together
 yields more for everyone, but only if both commit; hunting hare alone
 (`r_lone`) is worse, but doesn't depend on anyone else showing up.
 
+### Is Stag Hunt actually a social dilemma?
+
+Yes — by the paper's own four-way classification that `egta.py`
+implements (Prisoner's Dilemma / Chicken / Stag Hunt / non-SSD), Stag
+Hunt is one of the three dilemma categories, not the "no dilemma" case.
+Only "Non-SSD" (`R ≤ P`, or `R > P` with neither fear nor greed) means
+there's no dilemma at all.
+
+What makes it a dilemma even without greed: `R > P` — mutual cooperation
+(both wolves committing to the joint hunt) is collectively better than
+mutual defection (both going solo). That's the baseline requirement for
+*any* social dilemma. On top of that, Stag Hunt adds `fear > 0`: a wolf
+that commits to coordinating risks getting nothing if its partner doesn't
+reciprocate. So even though no individual wolf ever benefits from
+*betraying* a cooperating partner (that's what rules out greed), a purely
+self-interested, risk-averse wolf can still rationally choose the safer,
+lower-value solo strategy out of uncertainty about its partner — and if
+both wolves reason that way, they land on the collectively worse
+mutual-defection outcome despite mutual cooperation being available and
+better for both.
+
+That's the technical distinction from Prisoner's Dilemma: PD gives every
+player a dominant strategy to defect regardless of what the other player
+does (fear *and* greed). Stag Hunt has *two* stable equilibria —
+both-cooperate and both-defect — and the dilemma is a coordination/trust
+problem: which equilibrium do you converge on when you can't be sure of
+your partner. It's sometimes called an "assurance game" for exactly that
+reason. Still very much a social dilemma, just one solved by building
+trust/coordination rather than by removing temptation.
+
 ## Training result: learning to trust the stag hunt
 
 Trained with Ray RLlib's DQN backend (optional, additive to this repo's
