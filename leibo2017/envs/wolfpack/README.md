@@ -44,16 +44,86 @@ if the partner doesn't reciprocate (`fear = P − S > 0`). That "if" is
 doing all the work and is exactly the part this repo hasn't verified for
 this implementation's specific defaults.
 
-**Why the skeptical reading is reasonable**: since capturing solo never
-costs anything in the moment, the only way "chasing solo" can actually be
-a worse *strategy* is if it has a real opportunity cost — spending time
-away from your partner instead of positioned for a joint capture. Whether
-that opportunity cost is large enough to make solo-rushing a genuine
-temptation, or whether "grab the prey whenever you're near it" is just
-weakly dominant with no real trade-off either way, is an empirical
-question about this specific environment's dynamics (map size, prey
-speed, capture radius), not something derivable from the reward ratio
-alone.
+**Why the skeptical reading is reasonable — and may go further than just
+doubting greed.** Compare cooperate (`C`: stay near your partner, pursue
+joint captures) against defect (`D`: rush independently, grab the prey
+whenever available) as whole-episode strategies — this is exactly how
+`egta.py`'s cooperator-pool/defector-pool methodology operationalizes
+them. Four cells: `R` (both `C`) — coordinated, mostly team captures;
+`P` (both `D`) — independent, still nets occasional solo captures; `T`
+(`D` vs `C`) — the defector rushes ahead uncontested; `S` (`C` vs `D`) —
+the cooperator's partner isn't around when a capture opportunity appears.
+
+The usual Stag Hunt story needs `S` to be low — the classic "sucker's
+payoff" of getting nothing for trying to coordinate with a partner who
+didn't reciprocate. But that requires a cooperative policy to actually
+*forgo* captures while waiting around for its partner. Since touching the
+prey is never locally costly (previous point), there's no reason a
+sensible `C` policy would ever decline an available capture just because
+it's "trying to cooperate" — it would grab `r_lone` whenever the chance
+arose too, same as `D` would, just from a position that's usually closer
+to its partner. If that's right, `S` isn't the empty-handed sucker's
+payoff the Stag Hunt story needs — a cooperator still captures sometimes
+— which means `fear = P − S` could end up small or even `≤ 0`, not just
+`greed`. That would land the classification in **Non-SSD (R>P)**:
+cooperation still pays better in aggregate, but neither fear nor greed
+actually pulls anyone away from it, so by the paper's own scheme it
+wouldn't count as a dilemma at all.
+
+Whether that's actually how it plays out — or whether the opportunity
+cost of drifting away from your partner *is* large enough to make
+solo-rushing a genuine temptation after all — is an empirical question
+about this specific environment's dynamics (map size, prey speed,
+capture radius), not something derivable from the reward ratio alone.
+
+### What the reward ratio alone gives you: an idealized one-shot matrix
+
+Building a textbook-style, single-shot payoff matrix directly from
+`r_team`/`r_lone` — `C` = commit to hunting together, `D` = rush the prey
+alone, and two idealizing assumptions (a clean simultaneous single
+choice; if both defect, it's a 50/50 race for the same prey, so each
+nets `r_lone / 2` in expectation) —
+
+| | Partner: **C** | Partner: **D** |
+|---|---|---|
+| **You: C** | 5, 5 | 0, 1 |
+| **You: D** | 1, 0 | 0.5, 0.5 |
+
+`R=5 > P=0.5`, `fear = P−S = 0.5 > 0`, `greed = T−R = 1−5 = −4 ≤ 0` →
+**Stag Hunt**, matching the paper's narrative motivation exactly. This
+*is* a genuine social dilemma by `classify()`'s own criteria — two
+equilibria, mutual cooperation Pareto-better, but reaching it needs
+trusting your partner won't leave you with the sucker's payoff. It just
+isn't proof that Wolfpack's actual sequential dynamics reduce to it —
+the idealizing assumptions (especially "a cooperator gets `S=0`, exactly
+zero") are exactly what the previous section's skepticism questions.
+
+### What's actually measured (smoke-test scale): the idealization doesn't hold
+
+Running `run_egta_wolfpack.py` for real (defaults: pool size 4,
+20,000 training steps/policy — trains Pi^C at high capture-radius/bonus
+vs. Pi^D at low radius/bonus, per the paper's Fig. 5-6 method, then
+cross-plays them over full episodes):
+
+```
+R=0.425  P=0.200  S=0.300  T=0.275
+fear=-0.100  greed=-0.150  ->  Non-SSD (R>P)
+```
+
+Both `fear` and `greed` came back negative. In particular `S=0.300 > P=0.200` —
+the "cooperator" facing a defecting partner is *not* left empty-handed;
+it still out-earns the mutual-defection baseline, consistent with the
+mechanism the skeptical reading predicted (a sensible cooperative policy
+still grabs available captures rather than deliberately abstaining). At this
+scale, real trained-policy Wolfpack lands in **Non-SSD (R>P)**: mutual
+cooperation is still better in aggregate, but no dilemma actually pulls
+anyone away from it.
+
+Caveats before reading too much into this: smoke-test scale (20,000
+steps/policy vs. the paper's 40,000,000), pool size 4, `n_egta_samples=20` —
+nowhere near enough to be a confident measurement, and result variance
+across seeds hasn't been checked. It's a real number, not a guess, but
+it's one data point, not a settled answer for this environment.
 
 [`leibo2017/analysis/egta.py`](../../analysis/egta.py) implements the
 paper's own way to actually answer this: play trained cooperator-pool and
