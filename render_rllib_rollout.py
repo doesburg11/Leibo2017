@@ -22,7 +22,7 @@ import torch
 
 from leibo2017.envs.rllib_wrappers import AGENT_IDS
 from leibo2017.plotting.video import save_rollout_gif
-from run_rllib_train import ENV_FACTORIES, build_config, default_checkpoint_dir
+from run_rllib_train import ENV_FACTORIES, build_config, cleanup_algo_logdir, default_checkpoint_dir
 
 
 def greedy_actions(module_dict, obs_dict):
@@ -102,6 +102,7 @@ def main():
 
     ray.init(include_dashboard=False, logging_level="ERROR")
     algo = None
+    logdir = None
     try:
         config = build_config(
             args.game, args.algo, args.episode_length, args.hidden_size,
@@ -111,6 +112,7 @@ def main():
             updates_per_iteration=args.updates_per_iteration,
         )
         algo = config.build()
+        logdir = algo.logdir
         for i in range(1, args.iterations + 1):
             result = algo.train()
             env_runners = result.get("env_runners", {})
@@ -146,6 +148,7 @@ def main():
         # alone (which force-tears-down anything still attached).
         if algo is not None:
             algo.stop()
+        cleanup_algo_logdir(logdir)
         ray.shutdown()
 
     out_path = out_dir / f"{args.game}_{args.algo.lower()}_rollout.gif"

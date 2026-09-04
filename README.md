@@ -353,11 +353,16 @@ with `--checkpoint-dir`) — outside the repo entirely, in a user-level
 directory shared across projects, not `output/` (git-ignored but still
 repo-local and easy to lose track of). This is a real, reloadable RLlib
 checkpoint (model weights included) — distinct from `Algorithm.build()`'s
-own `~/ray_results/<timestamp>/` trial directory, which Ray creates as a
-side effect regardless and stays empty here: `algorithm_state.pkl`,
+own `~/ray_results/<timestamp>/` trial directory, which `Trainable.__init__`
+creates as a side effect of *any* `config.build()` call (a hardcoded
+constant in `ray.train.constants`, not something `AlgorithmConfig` exposes
+a way to redirect) and stays empty here: `algorithm_state.pkl`,
 `.../rl_module/module_state.pkl` etc. only get written by this explicit
 `algo.save()` call, or by driving training through a `ray.tune.Tuner` (not
-what these scripts do) instead of a manual `algo.train()` loop.
+what these scripts do) instead of a manual `algo.train()` loop. Both
+scripts call `cleanup_algo_logdir(algo.logdir)` in their `finally` block to
+`rmdir()` that empty trial dir once the run finishes, so it doesn't keep
+accumulating clutter in `~/ray_results` across runs.
 
 `leibo2017/envs/rllib_wrappers.py` adapts both envs' plain list-indexed
 `reset()`/`step()` API to RLlib's dict-keyed `MultiAgentEnv` API, one

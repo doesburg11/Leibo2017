@@ -45,6 +45,24 @@ def default_checkpoint_dir(game: str, algo: str) -> Path:
     return _RESULTS_ROOT / f"{algo}_Leibo2017_{game.capitalize()}_{timestamp}"
 
 
+def cleanup_algo_logdir(logdir: str | None) -> None:
+    """Removes the empty trial directory `Trainable.__init__` creates under
+    Ray's own DEFAULT_STORAGE_PATH (~/ray_results, a hardcoded constant in
+    ray.train.constants -- not configurable via AlgorithmConfig/build())
+    as a side effect of building ANY Algorithm without going through a
+    ray.tune.Tuner. Both scripts here call algo.save() to their own
+    explicit checkpoint_dir instead, so this directory is never actually
+    used for anything -- only rmdir()'d (which fails loudly if it somehow
+    isn't empty, rather than silently deleting real content) so it doesn't
+    keep accumulating clutter in ~/ray_results across runs."""
+    if not logdir:
+        return
+    try:
+        Path(logdir).rmdir()
+    except OSError:
+        pass
+
+
 # RLlib's own DQNConfig defaults for `epsilon`'s decay-to-floor timestep and
 # `target_network_update_freq` -- both counted in *global* env steps sampled
 # across every env runner combined (ray.rllib.env.multi_agent_env_runner
@@ -194,6 +212,7 @@ def main():
 
     ray.init(include_dashboard=False, logging_level="ERROR")
     algo = None
+    logdir = None
     try:
         config = build_config(
             args.game, args.algo, args.episode_length, args.hidden_size,
@@ -203,6 +222,7 @@ def main():
             updates_per_iteration=args.updates_per_iteration,
         )
         algo = config.build()
+        logdir = algo.logdir
         for i in range(1, args.iterations + 1):
             result = algo.train()
             env_runners = result.get("env_runners", {})
@@ -219,6 +239,7 @@ def main():
         # alone (which force-tears-down anything still attached).
         if algo is not None:
             algo.stop()
+        cleanup_algo_logdir(logdir)
         ray.shutdown()
 
 
