@@ -147,7 +147,58 @@ README's "Optional: RLlib backend" section, [`run_rllib_train.py`](../../../run_
 and [`render_rllib_rollout.py`](../../../render_rllib_rollout.py)), 30
 parallel env runners, GPU-backed learner, run once to 10,000 iterations
 and then again to 20,000 with identical settings to see whether the
-still-rising 10k curve kept climbing or was already leveling off:
+still-rising 10k curve kept climbing or was already leveling off.
+
+### This config vs. the paper's own setup
+
+Same question as [above](#is-this-actually-a-social-dilemma) but for
+training, not the environment: is *this* config anything like Sec. 3.1/4's?
+No — deliberately not (see the top-level README's "Optional: RLlib
+backend" section). What actually differs, and by how much:
+
+Note: a couple of "paper-faithful" values below are actually this repo's
+own filled-in choice for a detail the paper leaves unspecified, marked
+`(*)` — `train_batch_size=32` is called out as such in `dqn.py`'s own
+field comment; the FIFO replay-buffer *implementation* is this repo's
+concrete choice too, though the paper does specify a capped, constantly-
+refreshed buffer in general (just not FIFO specifically, nor a default
+size — the `1e5` default here is also this repo's own pick). Everything
+else in that column is a value Sec. 3.1/4 explicitly states.
+
+| | paper-faithful, `leibo2017/agents/dqn.py` | this experiment |
+|---|---|---|
+| network | MLP, 2×32 units | MLP, 2×32 units for the hidden layers, but RLlib's DQN also adds dueling + double-Q heads by default (not in the paper-faithful implementation) |
+| episode length | 1,000 steps | 200 steps |
+| epsilon floor | 1.0 → **0.1** (linear) | 1.0 → **0.05** (RLlib's own library default, not deliberately chosen) |
+| discount γ | 0.99 | 0.99 (RLlib's own default — coincidence, not deliberately matched) |
+| replay buffer | capped, refreshed; this repo's own FIFO implementation `(*)`, default capacity `1e5` `(*)` | `MultiAgentEpisodeReplayBuffer`, capacity 100k — different implementation |
+| env parallelism | none | 30 parallel env runners |
+| independence (no parameter sharing) | yes | yes — matches |
+| train batch size | 32 `(*)` | 256 |
+| gradient updates per env step (steady state, after buffer warmup) | 1 (`training/loop.py`) | ~0.0033 (`--updates-per-iteration 20` ÷ 6,000 steps/iteration) |
+| samples trained per env step collected, per agent | 32 | 0.85 |
+| total env steps (20k-iteration run) | 40,000,000 (paper's per-condition budget) | 120,000,000 |
+| total samples trained on, per agent (20k-iteration run) | ~1.28 billion (32 × steps, minus a 1,000-step buffer-warmup gap) | 102,400,000 |
+
+The last four rows are the one genuinely easy-to-miss trap: this
+experiment's 20,000-iteration run collected **3× more raw environment
+steps** than the paper's per-condition budget (thanks to 30 parallel env
+runners), but trained on **~12.5× fewer samples overall** — because the
+paper-faithful loop does a gradient update on essentially every single
+step once its replay buffer has warmed up (`train_batch_size=32`,
+`training/loop.py`), while this config does one
+`training_intensity`-controlled batch of 256 roughly every 300 steps.
+Collecting more experience isn't the same as learning more from it;
+those are two independent dials (`--num-env-runners` vs.
+`--updates-per-iteration`), and this config leans hard toward the first
+one. Matching that samples-trained-per-env-step ratio (32) would need
+`--updates-per-iteration` raised by roughly 32/0.85 ≈ 37.5×, from 20 to
+around 750 — not attempted here, since 750 gradient updates per iteration
+(vs. 20) would multiply this experiment's wall-clock cost substantially
+for a dimension the paper itself never actually specifies a target for
+(its own 40,000,000-step budget is stated in raw steps, not as a
+per-step training-intensity requirement — the 32:1 ratio above is this
+repo's own `(*)` choice, not the paper's).
 
 | iterations | mean episode return | eval capture rate |
 |---|---|---|
